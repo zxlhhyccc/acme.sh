@@ -110,7 +110,7 @@ _get_autodns_zone() {
   p=1
 
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     _debug h "$h"
 
     if [ -z "$h" ]; then
@@ -128,7 +128,7 @@ _get_autodns_zone() {
     if _contains "$autodns_response" "<summary>1</summary>" >/dev/null; then
       _zone="$(echo "$autodns_response" | _egrep_o '<name>[^<]*</name>' | cut -d '>' -f 2 | cut -d '<' -f 1)"
       _system_ns="$(echo "$autodns_response" | _egrep_o '<system_ns>[^<]*</system_ns>' | cut -d '>' -f 2 | cut -d '<' -f 1)"
-      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
+      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-"$p")
       return 0
     fi
 
@@ -139,12 +139,21 @@ _get_autodns_zone() {
   return 1
 }
 
+# Escape the XML special characters (& < > ' ") so that credentials
+# containing them do not break the request document (issue 5317).
+_autodns_xml_encode() {
+  sed "s/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g;s/'/\&apos;/g;s/\"/\&quot;/g"
+}
+
 _build_request_auth_xml() {
+  _autodns_user_xml="$(printf "%s" "$AUTODNS_USER" | _autodns_xml_encode)"
+  _autodns_password_xml="$(printf "%s" "$AUTODNS_PASSWORD" | _autodns_xml_encode)"
+  _autodns_context_xml="$(printf "%s" "$AUTODNS_CONTEXT" | _autodns_xml_encode)"
   printf "<auth>
     <user>%s</user>
     <password>%s</password>
     <context>%s</context>
-  </auth>" "$AUTODNS_USER" "$AUTODNS_PASSWORD" "$AUTODNS_CONTEXT"
+  </auth>" "$_autodns_user_xml" "$_autodns_password_xml" "$_autodns_context_xml"
 }
 
 # Arguments:

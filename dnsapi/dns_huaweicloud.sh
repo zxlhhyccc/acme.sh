@@ -7,11 +7,11 @@ Options:
  HUAWEICLOUD_Username Username
  HUAWEICLOUD_Password Password
  HUAWEICLOUD_DomainName DomainName
+ HUAWEICLOUD_Region Region. E.g. "cn-north-4". Optional, defaults to "ap-southeast-1".
 Issues: github.com/acmesh-official/acme.sh/issues/3265
 '
 
 iam_api="https://iam.myhuaweicloud.com"
-dns_api="https://dns.ap-southeast-1.myhuaweicloud.com" # Should work
 
 ########  Public functions #####################
 
@@ -30,6 +30,7 @@ dns_huaweicloud_add() {
   HUAWEICLOUD_Username="${HUAWEICLOUD_Username:-$(_readaccountconf_mutable HUAWEICLOUD_Username)}"
   HUAWEICLOUD_Password="${HUAWEICLOUD_Password:-$(_readaccountconf_mutable HUAWEICLOUD_Password)}"
   HUAWEICLOUD_DomainName="${HUAWEICLOUD_DomainName:-$(_readaccountconf_mutable HUAWEICLOUD_DomainName)}"
+  HUAWEICLOUD_Region="${HUAWEICLOUD_Region:-$(_readaccountconf_mutable HUAWEICLOUD_Region)}"
 
   # Check information
   if [ -z "${HUAWEICLOUD_Username}" ] || [ -z "${HUAWEICLOUD_Password}" ] || [ -z "${HUAWEICLOUD_DomainName}" ]; then
@@ -37,8 +38,11 @@ dns_huaweicloud_add() {
     return 1
   fi
 
+  _huaweicloud_region="${HUAWEICLOUD_Region:-ap-southeast-1}"
+  dns_api="https://dns.${_huaweicloud_region}.myhuaweicloud.com"
+
   unset token # Clear token
-  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_DomainName}")"
+  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_DomainName}" "${_huaweicloud_region}")"
   if [ -z "${token}" ]; then # Check token
     _err "dns_api(dns_huaweicloud): Error getting token."
     return 1
@@ -65,6 +69,9 @@ dns_huaweicloud_add() {
   _saveaccountconf_mutable HUAWEICLOUD_Username "${HUAWEICLOUD_Username}"
   _saveaccountconf_mutable HUAWEICLOUD_Password "${HUAWEICLOUD_Password}"
   _saveaccountconf_mutable HUAWEICLOUD_DomainName "${HUAWEICLOUD_DomainName}"
+  if [ -n "${HUAWEICLOUD_Region}" ]; then
+    _saveaccountconf_mutable HUAWEICLOUD_Region "${HUAWEICLOUD_Region}"
+  fi
   return 0
 }
 
@@ -81,6 +88,7 @@ dns_huaweicloud_rm() {
   HUAWEICLOUD_Username="${HUAWEICLOUD_Username:-$(_readaccountconf_mutable HUAWEICLOUD_Username)}"
   HUAWEICLOUD_Password="${HUAWEICLOUD_Password:-$(_readaccountconf_mutable HUAWEICLOUD_Password)}"
   HUAWEICLOUD_DomainName="${HUAWEICLOUD_DomainName:-$(_readaccountconf_mutable HUAWEICLOUD_DomainName)}"
+  HUAWEICLOUD_Region="${HUAWEICLOUD_Region:-$(_readaccountconf_mutable HUAWEICLOUD_Region)}"
 
   # Check information
   if [ -z "${HUAWEICLOUD_Username}" ] || [ -z "${HUAWEICLOUD_Password}" ] || [ -z "${HUAWEICLOUD_DomainName}" ]; then
@@ -88,8 +96,11 @@ dns_huaweicloud_rm() {
     return 1
   fi
 
+  _huaweicloud_region="${HUAWEICLOUD_Region:-ap-southeast-1}"
+  dns_api="https://dns.${_huaweicloud_region}.myhuaweicloud.com"
+
   unset token # Clear token
-  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_DomainName}")"
+  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_DomainName}" "${_huaweicloud_region}")"
   if [ -z "${token}" ]; then # Check token
     _err "dns_api(dns_huaweicloud): Error getting token."
     return 1
@@ -210,7 +221,7 @@ _get_recordset_id() {
   _zoneid=$3
   export _H1="X-Auth-Token: ${_token}"
 
-  response=$(_get "${dns_api}/v2/zones/${_zoneid}/recordsets?name=${_domain}")
+  response=$(_get "${dns_api}/v2/zones/${_zoneid}/recordsets?name=${_domain}&status=ACTIVE")
   if _contains "${response}" '"id"'; then
     _id="$(echo "${response}" | _egrep_o "\"id\": *\"[^\"]*\"" | cut -d : -f 2 | tr -d \" | tr -d " ")"
     printf "%s" "${_id}"
@@ -227,7 +238,7 @@ _add_record() {
 
   # Get Existing Records
   export _H1="X-Auth-Token: ${_token}"
-  response=$(_get "${dns_api}/v2/zones/${zoneid}/recordsets?name=${_domain}")
+  response=$(_get "${dns_api}/v2/zones/${zoneid}/recordsets?name=${_domain}&status=ACTIVE")
 
   _debug2 "${response}"
   _exist_record=$(echo "${response}" | _egrep_o '"records":[^]]*' | sed 's/\"records\"\:\[//g')
@@ -298,6 +309,7 @@ _get_token() {
   _username=$1
   _password=$2
   _domain_name=$3
+  _region_name=$4
 
   _debug "Getting Token"
   body="{
@@ -318,7 +330,7 @@ _get_token() {
       },
       \"scope\": {
         \"project\": {
-          \"name\": \"ap-southeast-1\"
+          \"name\": \"${_region_name}\"
         }
       }
     }

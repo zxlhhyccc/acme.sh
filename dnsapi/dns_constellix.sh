@@ -117,12 +117,12 @@ dns_constellix_rm() {
 ####################  Private functions below ##################################
 
 _get_root() {
-  domain=$1
+  domain=$(echo "$1" | _lower_case)
   i=2
   p=1
   _debug "Detecting root zone"
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     if [ -z "$h" ]; then
       return 1
     fi
@@ -134,7 +134,7 @@ _get_root() {
     if _contains "$response" "\"name\":\"$h\""; then
       _domain_id=$(printf "%s\n" "$response" | _egrep_o "\"id\":[0-9]*" | cut -d ':' -f 2)
       if [ "$_domain_id" ]; then
-        _sub_domain=$(printf "%s" "$domain" | cut -d '.' -f 1-$p)
+        _sub_domain=$(printf "%s" "$domain" | cut -d '.' -f 1-"$p")
         _domain="$h"
 
         _debug _domain_id "$_domain_id"
@@ -155,6 +155,9 @@ _constellix_rest() {
   ep="$2"
   data="$3"
   _debug "$ep"
+
+  # Prevent rate limit
+  _sleep 2
 
   rdate=$(date +"%s")"000"
   hmac=$(printf "%s" "$rdate" | _hmac sha1 "$(printf "%s" "$CONSTELLIX_Secret" | _hex_dump | tr -d ' ')" | _base64)

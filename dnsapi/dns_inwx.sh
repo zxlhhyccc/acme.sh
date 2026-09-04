@@ -6,6 +6,7 @@ Docs: github.com/acmesh-official/acme.sh/wiki/dnsapi#dns_inwx
 Options:
  INWX_User Username
  INWX_Password Password
+ INWX_Shared_Secret 2 Factor Authentication Shared Secret (optional requires oathtool)
 '
 
 # Dependencies:
@@ -110,11 +111,17 @@ dns_inwx_rm() {
         <string>%s</string>
        </value>
       </member>
+      <member>
+       <name>content</name>
+       <value>
+        <string>%s</string>
+       </value>
+      </member>
      </struct>
     </value>
    </param>
   </params>
-  </methodCall>' "$_domain" "$_sub_domain")
+  </methodCall>' "$_domain" "$_sub_domain" "$txtvalue")
   response="$(_post "$xml_content" "$INWX_Api" "" "POST")"
 
   if ! _contains "$response" "Command completed successfully"; then
@@ -125,7 +132,7 @@ dns_inwx_rm() {
   if ! printf "%s" "$response" | grep "count" >/dev/null; then
     _info "Do not need to delete record"
   else
-    _record_id=$(printf '%s' "$response" | _egrep_o '.*(<member><name>record){1}(.*)([0-9]+){1}' | _egrep_o '<name>id<\/name><value><int>[0-9]+' | _egrep_o '[0-9]+')
+    _record_id=$(printf '%s' "$response" | _egrep_o '.*(<member><name>record){1}(.*)([0-9]+){1}' | _egrep_o '<name>id<\/name><value><string>[0-9]+' | _egrep_o '[0-9]+')
     _info "Deleting record"
     _inwx_delete_record "$_record_id"
   fi
@@ -163,12 +170,23 @@ _inwx_check_cookie() {
   return 1
 }
 
+_htmlEscape() {
+  _s="$1"
+  _s=$(echo "$_s" | sed "s/&/&amp;/g")
+  _s=$(echo "$_s" | sed "s/</\&lt;/g")
+  _s=$(echo "$_s" | sed "s/>/\&gt;/g")
+  _s=$(echo "$_s" | sed 's/"/\&quot;/g')
+  printf -- %s "$_s"
+}
+
 _inwx_login() {
 
   if _inwx_check_cookie; then
     _debug "Already logged in"
     return 0
   fi
+
+  XML_PASS=$(_htmlEscape "$INWX_Password")
 
   xml_content=$(printf '<?xml version="1.0" encoding="UTF-8"?>
   <methodCall>
@@ -193,7 +211,7 @@ _inwx_login() {
     </value>
    </param>
   </params>
-  </methodCall>' "$INWX_User" "$INWX_Password")
+  </methodCall>' "$INWX_User" "$XML_PASS")
 
   response="$(_post "$xml_content" "$INWX_Api" "" "POST")"
 
@@ -282,17 +300,38 @@ _get_root() {
 
   response="$(_post "$xml_content" "$INWX_Api" "" "POST")"
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     _debug h "$h"
     if [ -z "$h" ]; then
       #not valid
       return 1
     fi
 
-    if _contains "$response" "$h"; then
-      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
+    # Anchor the match to the XML tag and escape dots so $h is compared
+    # literally: _contains uses grep, which treats "$h" as a regex, and a
+    # bare "g.berlight.de" would match "<string>berlight.de" (the 'g' from
+    # "<string>" plus '.' matching '>'). See issue #5129.
+    _hregex=$(printf "%s" "$h" | sed 's/\./\\./g')
+    if _contains "$response" "<string>$_hregex</string>"; then
+      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-"$p")
       _domain="$h"
       return 0
+    fi
+    # IDN fallback: INWX returns Unicode zone names; when $h is ACE/punycode,
+    # encode each zone name via _idn() and compare -- no python dependency.
+    if _contains "$h" "xn--"; then
+      _zone_unicode=$(printf "%s" "$response" | _egrep_o '<string>[^<]*' |
+        sed 's/<[^>]*>//g' | while IFS= read -r _z; do
+        if [ "$(_idn "$_z")" = "$h" ]; then
+          printf "%s" "$_z"
+          break
+        fi
+      done)
+      if [ -n "$_zone_unicode" ]; then
+        _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-"$p")
+        _domain="$_zone_unicode"
+        return 0
+      fi
     fi
     p=$i
     i=$(_math "$i" + 1)
@@ -313,7 +352,7 @@ _inwx_delete_record() {
       <member>
        <name>id</name>
        <value>
-        <int>%s</int>
+        <string>%s</string>
        </value>
       </member>
      </struct>
@@ -351,7 +390,7 @@ _inwx_update_record() {
       <member>
        <name>id</name>
        <value>
-        <int>%s</int>
+        <string>%s</string>
        </value>
       </member>
      </struct>

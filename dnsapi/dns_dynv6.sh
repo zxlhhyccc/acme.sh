@@ -8,7 +8,7 @@ Options:
 OptionsAlt:
  KEY Path to SSH private key file. E.g. "/root/.ssh/dynv6"
 Issues: github.com/acmesh-official/acme.sh/issues/2702
-Author: StefanAbl
+Author: @StefanAbl
 '
 
 dynv6_api="https://dynv6.com/api/v2"
@@ -16,8 +16,8 @@ dynv6_api="https://dynv6.com/api/v2"
 # Please Read this guide first: https://github.com/Neilpang/acme.sh/wiki/DNS-API-Dev-Guide
 #Usage: dns_dynv6_add  _acme-challenge.www.domain.com  "XKrxpRBosdIKFzxW_CT3KLZNf6q0HG9i01zxXp5CPBs"
 dns_dynv6_add() {
-  fulldomain=$1
-  txtvalue=$2
+  fulldomain="$(echo "$1" | _lower_case)"
+  txtvalue="$2"
   _info "Using dynv6 api"
   _debug fulldomain "$fulldomain"
   _debug txtvalue "$txtvalue"
@@ -43,15 +43,14 @@ dns_dynv6_add() {
       _err "Something went wrong! it does not seem like the record was added successfully"
       return 1
     fi
-    return 1
   fi
-  return 1
+
 }
 #Usage: fulldomain txtvalue
 #Remove the txt record after validation.
 dns_dynv6_rm() {
-  fulldomain=$1
-  txtvalue=$2
+  fulldomain="$(echo "$1" | _lower_case)"
+  txtvalue="$2"
   _info "Using dynv6 API"
   _debug fulldomain "$fulldomain"
   _debug txtvalue "$txtvalue"
@@ -108,7 +107,7 @@ _get_domain() {
       return 0
     fi
   done
-  _err "Either their is no such host on your dnyv6 account or it cannot be accessed with this key"
+  _err "Either there is no such host on your dynv6 account, or it cannot be accessed with this key"
   return 1
 }
 
@@ -151,6 +150,9 @@ _dns_dynv6_add_http() {
   fi
   _get_zone_name "$_zone_id"
   record=${fulldomain%%."$_zone_name"}
+  if [ "$fulldomain" = "$_zone_name" ]; then
+    record=""
+  fi
   _set_record TXT "$record" "$txtvalue"
   if _contains "$response" "$txtvalue"; then
     _info "Successfully added record"
@@ -169,6 +171,9 @@ _dns_dynv6_rm_http() {
   fi
   _get_zone_name "$_zone_id"
   record=${fulldomain%%."$_zone_name"}
+  if [ "$fulldomain" = "$_zone_name" ]; then
+    record=""
+  fi
   _get_record_id "$_zone_id" "$record" "$txtvalue"
   _del_record "$_zone_id" "$_record_id"
   if [ -z "$response" ]; then
@@ -180,8 +185,8 @@ _dns_dynv6_rm_http() {
   fi
 }
 
+#Usage: _get_zone_id $record
 #get the zoneid for a specifc record or zone
-#usage: _get_zone_id §record
 #where $record is the record to get the id for
 #returns _zone_id the id of the zone
 _get_zone_id() {
@@ -190,7 +195,6 @@ _get_zone_id() {
   _dynv6_rest GET zones
 
   zones="$(echo "$response" | tr '}' '\n' | tr ',' '\n' | grep name | sed 's/\[//g' | tr -d '{' | tr -d '"')"
-  #echo $zones
 
   selected=""
   for z in $zones; do
@@ -206,7 +210,7 @@ _get_zone_id() {
     return 1
   fi
 
-  zone_id="$(echo "$response" | tr '}' '\n' | grep "$selected" | tr ',' '\n' | grep id | tr -d '"')"
+  zone_id="$(echo "$response" | tr '}' '\n' | grep "$selected" | tr ',' '\n' | grep '"id":' | tr -d '"')"
   _zone_id="${zone_id#id:}"
   _debug "zone id: $_zone_id"
 }
@@ -218,9 +222,9 @@ _get_zone_name() {
   _zone_name="${_zone_name#name:}"
 }
 
-#usaage _get_record_id $zone_id $record
-# where zone_id is thevalue returned by _get_zone_id
-# and record ist in the form _acme.www for an fqdn of _acme.www.example.com
+#usage _get_record_id $zone_id $record
+# where zone_id is the value returned by _get_zone_id
+# and record is in the form _acme.www for an fqdn of _acme.www.example.com
 # returns _record_id
 _get_record_id() {
   _zone_id="$1"
@@ -235,8 +239,7 @@ _get_record_id() {
 
 _get_record_id_from_response() {
   response="$1"
-  _record_id="$(echo "$response" | tr '}' '\n' | grep "\"name\":\"$record\"" | grep "\"data\":\"$value\"" | tr ',' '\n' | grep id | tr -d '"' | tr -d 'id:')"
-  #_record_id="${_record_id#id:}"
+  _record_id="$(echo "$response" | tr '}' '\n' | grep "\"name\":\"$record\"" | grep "\"data\":\"$value\"" | tr ',' '\n' | grep '"id":' | tr -d '"' | tr -d 'id:' | tr -d '{')"
   if [ -z "$_record_id" ]; then
     _err "no such record: $record found in zone $_zone_id"
     return 1

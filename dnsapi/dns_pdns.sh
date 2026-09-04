@@ -7,7 +7,7 @@ Options:
  PDNS_Url API URL. E.g. "http://ns.example.com:8081"
  PDNS_ServerId Server ID. E.g. "localhost"
  PDNS_Token API Token
- PDNS_Ttl=60 Domain TTL. Default: "60".
+ PDNS_Ttl Domain TTL. Default: "60".
 '
 
 DEFAULT_PDNS_TTL=60
@@ -19,6 +19,11 @@ DEFAULT_PDNS_TTL=60
 dns_pdns_add() {
   fulldomain=$1
   txtvalue=$2
+
+  PDNS_Url="${PDNS_Url:-$(_readaccountconf_mutable PDNS_Url)}"
+  PDNS_ServerId="${PDNS_ServerId:-$(_readaccountconf_mutable PDNS_ServerId)}"
+  PDNS_Token="${PDNS_Token:-$(_readaccountconf_mutable PDNS_Token)}"
+  PDNS_Ttl="${PDNS_Ttl:-$(_readaccountconf_mutable PDNS_Ttl)}"
 
   if [ -z "$PDNS_Url" ]; then
     PDNS_Url=""
@@ -45,13 +50,16 @@ dns_pdns_add() {
     PDNS_Ttl="$DEFAULT_PDNS_TTL"
   fi
 
+  # Ensure PDNS_Url has no trailing slash ('/')
+  PDNS_Url="${PDNS_Url%/}"
+
   #save the api addr and key to the account conf file.
-  _saveaccountconf PDNS_Url "$PDNS_Url"
-  _saveaccountconf PDNS_ServerId "$PDNS_ServerId"
-  _saveaccountconf PDNS_Token "$PDNS_Token"
+  _saveaccountconf_mutable PDNS_Url "$PDNS_Url"
+  _saveaccountconf_mutable PDNS_ServerId "$PDNS_ServerId"
+  _saveaccountconf_mutable PDNS_Token "$PDNS_Token"
 
   if [ "$PDNS_Ttl" != "$DEFAULT_PDNS_TTL" ]; then
-    _saveaccountconf PDNS_Ttl "$PDNS_Ttl"
+    _saveaccountconf_mutable PDNS_Ttl "$PDNS_Ttl"
   fi
 
   _debug "Detect root zone"
@@ -72,6 +80,11 @@ dns_pdns_add() {
 dns_pdns_rm() {
   fulldomain=$1
   txtvalue=$2
+
+  PDNS_Url="${PDNS_Url:-$(_readaccountconf_mutable PDNS_Url)}"
+  PDNS_ServerId="${PDNS_ServerId:-$(_readaccountconf_mutable PDNS_ServerId)}"
+  PDNS_Token="${PDNS_Token:-$(_readaccountconf_mutable PDNS_Token)}"
+  PDNS_Ttl="${PDNS_Ttl:-$(_readaccountconf_mutable PDNS_Ttl)}"
 
   if [ -z "$PDNS_Ttl" ]; then
     PDNS_Ttl="$DEFAULT_PDNS_TTL"
@@ -176,25 +189,29 @@ _get_root() {
   domain=$1
   i=1
 
-  if _pdns_rest "GET" "/api/v1/servers/$PDNS_ServerId/zones"; then
-    _zones_response=$(echo "$response" | _normalizeJson)
-  fi
-
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
 
-    if _contains "$_zones_response" "\"name\":\"$h.\""; then
-      _domain="$h."
-      if [ -z "$h" ]; then
-        _domain="=2E"
+    # Probe each candidate zone with the server-side name filter instead of
+    # listing every zone: with large installations (100k zones) the
+    # unfiltered list takes minutes. Servers that ignore the parameter
+    # return the full list, which the check below still handles.
+    # https://doc.powerdns.com/authoritative/http-api/zone.html
+    if _pdns_rest "GET" "/api/v1/servers/$PDNS_ServerId/zones?zone=$h."; then
+      _zones_response=$(echo "$response" | _normalizeJson)
+      if _contains "$_zones_response" "\"name\":\"$h.\""; then
+        _domain="$h."
+        if [ -z "$h" ]; then
+          _domain="=2E"
+        fi
+        return 0
       fi
-      return 0
     fi
 
     if [ -z "$h" ]; then
       return 1
     fi
-    i=$(_math $i + 1)
+    i=$(_math "$i" + 1)
   done
   _debug "$domain not found"
 

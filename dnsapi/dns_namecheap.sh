@@ -104,12 +104,15 @@ _get_root_by_getList() {
     return 1
   fi
 
+  _namecheap_domain_list=$(echo "$response" | _egrep_o '<Domain [^>]*')
+  _debug2 domain_list "$_namecheap_domain_list"
+
   i=2
   p=1
 
   while true; do
 
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     _debug h "$h"
     if [ -z "$h" ]; then
       #not valid
@@ -120,10 +123,10 @@ _get_root_by_getList() {
       return 1
     fi
 
-    if ! _contains "$response" "$h"; then
+    if ! _namecheap_is_our_dns "$h"; then
       _debug "$h not found"
     else
-      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
+      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-"$p")
       _domain="$h"
       return 0
     fi
@@ -133,18 +136,41 @@ _get_root_by_getList() {
   return 1
 }
 
+#Usage: _namecheap_is_our_dns <domain>
+#Succeeds only when domains.getList listed exactly <domain> AND that entry is
+#served by Namecheap's own DNS. A domain parked on Namecheap's webhosting DNS
+#is listed with IsOurDNS="false", and every dns.getHosts/setHosts call against
+#it is refused with error 2030288 "not using proper DNS servers". Accepting
+#such a domain as the root zone hides a subdomain that IS delegated to
+#Namecheap DNS and that the getHosts probe below would have found.
+#https://github.com/acmesh-official/acme.sh/issues/7178
+_namecheap_is_our_dns() {
+  _namecheap_entry=$(echo "$_namecheap_domain_list" | grep -F " Name=\"$1\"" | _head_n 1)
+  if [ -z "$_namecheap_entry" ]; then
+    return 1
+  fi
+
+  _namecheap_ourdns=$(echo "$_namecheap_entry" | _egrep_o ' IsOurDNS="[^"]*' | cut -d '"' -f 2)
+  _debug2 "$1 IsOurDNS" "$_namecheap_ourdns"
+
+  if [ "$_namecheap_ourdns" = "true" ]; then
+    return 0
+  fi
+  return 1
+}
+
 _get_root_by_getHosts() {
   i=100
   p=99
 
-  while [ $p -ne 0 ]; do
+  while [ "$p" -ne 0 ]; do
 
-    h=$(printf "%s" "$1" | cut -d . -f $i-100)
+    h=$(printf "%s" "$1" | cut -d . -f "$i"-100)
     if [ -n "$h" ]; then
       if _contains "$h" "\\."; then
         _debug h "$h"
         if _namecheap_set_tld_sld "$h"; then
-          _sub_domain=$(printf "%s" "$1" | cut -d . -f 1-$p)
+          _sub_domain=$(printf "%s" "$1" | cut -d . -f 1-"$p")
           _domain="$h"
           return 0
         else
@@ -264,8 +290,16 @@ _set_namecheap_TXT() {
   _debug hosts "$hosts"
 
   if [ -z "$hosts" ]; then
-    _err "Hosts not found"
-    return 1
+    # An empty host list is only acceptable when the API positively confirms
+    # a successful getHosts reply: setHosts below REPLACES all records, so
+    # proceeding on a malformed/unparsed response would wipe the whole zone.
+    # https://github.com/acmesh-official/acme.sh/issues/6963
+    if _contains "$response" "Status=\"OK\"" && _contains "$response" "DomainDNSGetHostsResult"; then
+      _debug "No existing host records, adding the TXT record as the first one"
+    else
+      _err "Hosts not found"
+      return 1
+    fi
   fi
 
   _namecheap_reset_hostList
@@ -378,7 +412,7 @@ _namecheap_set_tld_sld() {
 
   while true; do
 
-    _tld=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    _tld=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     _debug tld "$_tld"
 
     if [ -z "$_tld" ]; then

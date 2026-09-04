@@ -7,7 +7,7 @@ Options:
  WS_ApiKey API Key. Called "Identifier" in the WS Admin
  WS_ApiSecret API Secret. Called "Secret key" in the WS Admin
 Issues: github.com/acmesh-official/acme.sh/issues/3486
-Author: trgo.sk <https://github.com/trgosk>, akulumbeg <https://github.com/akulumbeg>
+Author: trgo.sk <@trgosk>, @akulumbeg
 '
 
 # Requirements: API Key and Secret from https://admin.websupport.sk/en/auth/apiKey
@@ -121,7 +121,7 @@ _get_root() {
   p=1
 
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     _debug h "$h"
     if [ -z "$h" ]; then
       #not valid
@@ -135,7 +135,7 @@ _get_root() {
     if _contains "$response" "\"name\":\"$h\""; then
       _domain_id=$(echo "$response" | _egrep_o "\[.\"id\": *[^,]*" | _head_n 1 | cut -d : -f 2 | tr -d \" | tr -d " ")
       if [ "$_domain_id" ]; then
-        _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
+        _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-"$p")
         _domain=$h
         return 0
       fi

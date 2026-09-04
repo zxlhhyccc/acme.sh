@@ -6,7 +6,7 @@ Docs: github.com/acmesh-official/acme.sh/wiki/dnsapi#dns_mydnsjp
 Options:
  MYDNSJP_MasterID Master ID
  MYDNSJP_Password Password
-Author: epgdatacapbon
+Author: @tkmsst
 '
 
 ########  Public functions #####################
@@ -126,7 +126,7 @@ _get_root() {
   fi
 
   while true; do
-    _domain=$(printf "%s" "$fulldomain" | cut -d . -f $i-100)
+    _domain=$(printf "%s" "$fulldomain" | cut -d . -f "$i"-100)
 
     if [ -z "$_domain" ]; then
       # not valid
@@ -134,7 +134,7 @@ _get_root() {
     fi
 
     if [ "$_domain" = "$_root_domain" ]; then
-      _sub_domain=$(printf "%s" "$fulldomain" | cut -d . -f 1-$p)
+      _sub_domain=$(printf "%s" "$fulldomain" | cut -d . -f 1-"$p")
       return 0
     fi
 

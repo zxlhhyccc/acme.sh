@@ -135,7 +135,7 @@ _dns_cloudns_init_check() {
   _dns_cloudns_http_api_call "dns/login.json" ""
 
   if ! _contains "$response" "\"status\":\"Success\""; then
-    _err "Invalid CLOUDNS_AUTH_ID or CLOUDNS_AUTH_PASSWORD. Please check your login credentials."
+    _err "Invalid CLOUDNS_AUTH_ID or CLOUDNS_AUTH_PASSWORD. Server response: $response"
     return 1
   fi
 
@@ -164,7 +164,7 @@ _dns_cloudns_get_zone_info() {
 _dns_cloudns_get_zone_name() {
   i=2
   while true; do
-    zoneForCheck=$(printf "%s" "$1" | cut -d . -f $i-100)
+    zoneForCheck=$(printf "%s" "$1" | cut -d . -f "$i"-100)
 
     if [ -z "$zoneForCheck" ]; then
       return 1
@@ -197,10 +197,11 @@ _dns_cloudns_http_api_call() {
     auth_user="auth-id=$CLOUDNS_AUTH_ID"
   fi
 
+  encoded_password=$(echo "$CLOUDNS_AUTH_PASSWORD" | tr -d "\n\r" | _url_encode)
   if [ -z "$2" ]; then
-    data="$auth_user&auth-password=$CLOUDNS_AUTH_PASSWORD"
+    data="$auth_user&auth-password=$encoded_password"
   else
-    data="$auth_user&auth-password=$CLOUDNS_AUTH_PASSWORD&$2"
+    data="$auth_user&auth-password=$encoded_password&$2"
   fi
 
   response="$(_get "$CLOUDNS_API/$method?$data")"

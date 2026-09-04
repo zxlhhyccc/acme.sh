@@ -113,7 +113,7 @@ _initAuth() {
     _saveaccountconf_mutable OVH_END_POINT "$OVH_END_POINT"
   fi
 
-  OVH_API="$(_ovh_get_api $OVH_END_POINT)"
+  OVH_API="$(_ovh_get_api "$OVH_END_POINT")"
   _debug OVH_API "$OVH_API"
 
   OVH_CK="${OVH_CK:-$(_readaccountconf_mutable OVH_CK)}"
@@ -201,7 +201,7 @@ dns_ovh_rm() {
     if ! _ovh_rest GET "domain/zone/$_domain/record/$rid"; then
       return 1
     fi
-    if _contains "$response" "\"target\":\"$txtvalue\""; then
+    if _contains "$response" "$txtvalue"; then
       _debug "Found txt id:$rid"
       if ! _ovh_rest DELETE "domain/zone/$_domain/record/$rid"; then
         return 1
@@ -224,7 +224,7 @@ _ovh_authentication() {
   _H3=""
   _H4=""
 
-  _ovhdata='{"accessRules": [{"method": "GET","path": "/auth/time"},{"method": "GET","path": "/domain"},{"method": "GET","path": "/domain/zone/*"},{"method": "GET","path": "/domain/zone/*/record"},{"method": "POST","path": "/domain/zone/*/record"},{"method": "POST","path": "/domain/zone/*/refresh"},{"method": "PUT","path": "/domain/zone/*/record/*"},{"method": "DELETE","path": "/domain/zone/*/record/*"}],"redirection":"'$ovh_success'"}'
+  _ovhdata='{"accessRules": [{"method": "GET","path": "/auth/time"},{"method": "GET","path": "/domain"},{"method": "GET","path": "/domain/zone/*"},{"method": "GET","path": "/domain/zone/*/record"},{"method": "GET","path": "/domain/zone/*/record/*"},{"method": "POST","path": "/domain/zone/*/record"},{"method": "POST","path": "/domain/zone/*/refresh"},{"method": "PUT","path": "/domain/zone/*/record/*"},{"method": "DELETE","path": "/domain/zone/*/record/*"}],"redirection":"'$ovh_success'"}'
 
   response="$(_post "$_ovhdata" "$OVH_API/auth/credential")"
   _debug3 response "$response"
@@ -260,7 +260,7 @@ _get_root() {
   i=1
   p=1
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     if [ -z "$h" ]; then
       #not valid
       return 1
@@ -273,7 +273,7 @@ _get_root() {
     if ! _contains "$response" "This service does not exist" >/dev/null &&
       ! _contains "$response" "This call has not been granted" >/dev/null &&
       ! _contains "$response" "NOT_GRANTED_CALL" >/dev/null; then
-      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
+      _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-"$p")
       _domain="$h"
       return 0
     fi

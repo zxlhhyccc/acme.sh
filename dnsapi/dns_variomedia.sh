@@ -74,7 +74,7 @@ dns_variomedia_rm() {
     return 1
   fi
 
-  _record_id="$(echo "$response" | sed -E 's/,"tags":\[[^]]*\]//g' | cut -d '[' -f2 | cut -d']' -f1 | sed 's/},[ \t]*{/\},§\{/g' | tr § '\n' | grep "$_sub_domain" | grep -- "$txtvalue" | sed 's/^{//;s/}[,]?$//' | tr , '\n' | tr -d '\"' | grep ^id | cut -d : -f2 | tr -d ' ')"
+  _record_id="$(echo "$response" | sed -E 's/,"tags":\[[^]]*\]//g' | cut -d '[' -f3 | cut -d']' -f1 | sed 's/},[ \t]*{/\},§\{/g' | tr § '\n' | grep -i "$_sub_domain" | grep -- "$txtvalue" | sed 's/^{//;s/}[,]?$//' | tr , '\n' | tr -d '\"' | grep ^id | cut -d : -f2 | tr -d ' ')"
   _debug _record_id "$_record_id"
   if [ "$_record_id" ]; then
     _info "Successfully retrieved the record id for ACME challenge."
@@ -102,7 +102,7 @@ _get_root() {
   i=1
   p=1
   while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
+    h=$(printf "%s" "$domain" | cut -d . -f "$i"-100)
     if [ -z "$h" ]; then
       return 1
     fi
@@ -112,7 +112,7 @@ _get_root() {
     fi
 
     if _contains "$response" "\"id\":\"$h\""; then
-      _sub_domain=$(printf "%s" "$domain" | cut -d '.' -f 1-$p)
+      _sub_domain=$(printf "%s" "$domain" | cut -d '.' -f 1-"$p")
       _domain="$h"
       return 0
     fi
